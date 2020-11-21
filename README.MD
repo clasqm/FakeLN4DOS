@@ -1,13 +1,14 @@
-LN v0.1 - A fake symlink creator for DOS
+LN v0.2 - A fake symlink creator for DOS
 ========================================
 
-Usage: LN <parameters> SOURCE [ .COM .EXE .BAT .TXT .DOC \\ ] TARGET
+Usage: LN <parameters> SOURCE [ .COM .EXE .BAT .TXT .DOC .HTM .MD \\ ] TARGET
 
        /? -h --help : Display this help text.
        /d -d : CD to TARGET's directory before executing.
        /e -e : Edit batch file after creation.
        /m -m : Save this help to a Markdown-formatted text file.
        /p -p : Enable TARGET to handle parameters 1 to 9.
+       /r -r : Dry run. Display batch file but do not create it
        /s -s : Does nothing, just kept for compatibility.
        /v -v : View batch file after creation.
 
@@ -36,7 +37,7 @@ Creates: c:\fdos\links\wp6.bat
 
 TEXT FILES
 ----------
-If SOURCE is a text file (TXT, DOC), then LN creates a 2-line batch
+If SOURCE is a text file (TXT, DOC, HTM, MD), then LN creates a 2-line batch
 file that, when run, loads the file into the default text editor
 (the EDIT command).  
 The /d and /p parameters are not used.

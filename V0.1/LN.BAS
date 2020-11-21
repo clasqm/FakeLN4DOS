@@ -5,19 +5,15 @@ REM $lang: "qb"
 DECLARE SUB MakeBatchExec (TargetDrive$, Target$, SourceDrive$, Source$)
 DECLARE SUB MakeBatchText (TargetDrive$, Target$, SourceDrive$, Source$)
 DECLARE SUB MakeBatchDirectory (TargetDrive$, Target$, SourceDrive$, Source$)
-DECLARE SUB PostCreation (TheFile$)
 DECLARE FUNCTION GetExtension% (filename$)
 DECLARE FUNCTION Exists% (filename$)
-DECLARE SUB ParseParam ()
 DECLARE SUB SpaceCheck ()
 DECLARE SUB ErrorWarning (error$)
 DECLARE FUNCTION GetFile$ (file$)
 DECLARE SUB ShowHelp (destination%)
 COMMON SHARED param$, version$
-COMMON SHARED addparams, cdbefore, editafter, exportafter, viewafter, dryrun, spaces
-COMMON SHARED a$()
-DIM a$(1)
-version$ = "0.2"
+COMMON SHARED addparams, cdbefore, editafter, exportafter, viewafter
+version$ = "0.1"
 
 REM get parameters - already in uppercase
 param$ = COMMAND$
@@ -41,11 +37,9 @@ REM check for other parameters
 IF INSTR(param$, "/D ") OR INSTR(param$, "-D ") THEN cdbefore = 1
 IF INSTR(param$, "/E ") OR INSTR(param$, "-E ") THEN editafter = 1
 IF INSTR(param$, "/P ") OR INSTR(param$, "-P ") THEN addparams = 1
-IF INSTR(param$, "/R ") OR INSTR(param$, "-R ") THEN dryrun = 1
 IF INSTR(param$, "/V ") OR INSTR(param$, "-V ") THEN viewafter = 1
 
 REM get filenames
-CALL ParseParam
 Source$ = GetFile$("src")
 IF INSTR(Source$, "/") THEN
    IF LEN(Source$) = 2 THEN
@@ -67,7 +61,6 @@ IF INSTR(Target$, "/") THEN
         ErrorWarning ("slashes")
     END IF
 END IF
-IF Exists%(Target$) THEN ErrorWarning ("targetexists")
 IF MID$(Target$, 2, 1) = ":" THEN
     TargetDrive$ = LEFT$(Target$, 2)
     Target$ = MID$(Target$, 3)
@@ -99,10 +92,8 @@ SUB ErrorWarning (errors$)
             PRINT "Forward slash(es) detected (/). Please use DOS-style backslashes (\)."
         CASE "filetype"
             PRINT "SOURCE does not appear to be a valid filetype."
-            PRINT "(.COM .EXE .BAT .TXT .DOC .HTM .MD or \)"
+            PRINT "(.COM .EXE .BAT .TXT .DOC or \)"
             PRINT "Please use LN with no parameters (or with /?) for Help."
-        CASE "targetexists"
-            PRINT "TARGET already exists. Please delete it and try again."
     END SELECT
     SYSTEM
 END SUB
@@ -116,14 +107,14 @@ REM won't work if you're trying to test for file of length 0 which already
 REM exists.
 REM adopted/adapted from a routine by Steve Haiko
 REM *******************************************************************************
-    FileNr% = FREEFILE
-    OPEN filename$ FOR BINARY AS FileNr%
-    IF LOF(FileNr%) THEN
+    FileNr = FREEFILE
+    OPEN filename$ FOR BINARY AS FileNr
+    IF LOF(FileNr) THEN
         Exist1% = 1
-        CLOSE FileNr%
+        CLOSE FileNr
     ELSE
         Exist1% = 0
-        CLOSE FileNr%
+        CLOSE FileNr
         KILL filename$
     END IF
     Exists% = Exist1%
@@ -137,16 +128,35 @@ FUNCTION GetExtension% (filename$)
         SELECT CASE Extension$
             CASE ".COM", ".EXE", ".BAT"
                 Extension% = 1
-            CASE ".DOC", ".TXT", ".HTM"
+            CASE ".DOC", ".TXT"
                 Extension% = 2
         END SELECT
     END IF
-    Extension$ = RIGHT$(filename$, 3)
-    IF Extension$ = ".MD" THEN Extension% = 2
     GetExtension% = Extension%
 END FUNCTION
 
 FUNCTION GetFile$ (file$)
+    localparam$ = param$
+    flen = LEN(localparam$)
+    spaces = 1
+    FOR f = 1 TO flen
+        IF MID$(localparam$, f, 1) = " " THEN spaces = spaces + 1
+    NEXT f
+    DIM a$(spaces)
+    FOR f = 1 TO spaces
+        FOR n = 1 TO flen
+            IF LEFT$(localparam$, 1) <> " " THEN
+                a$(f) = a$(f) + LEFT$(localparam$, 1)
+                localparam$ = RIGHT$(localparam$, flen - 1)
+                flen = flen - 1
+            ELSE
+                localparam$ = RIGHT$(localparam$, flen - 1)
+                flen = flen - 1
+                EXIT FOR
+            END IF
+        NEXT n
+    NEXT f
+
     IF file$ = "src" THEN
         GetFile1$ = a$(spaces - 1)
     ELSEIF file$ = "trgt" THEN
@@ -164,7 +174,8 @@ SUB MakeBatchDirectory (TargetDrive$, Target$, SourceDrive$, Source$)
     PRINT #FileNr%, SourceDrive$
     PRINT #FileNr%, "cd " + Source$
     CLOSE
-    PostCreation (TheFile$)
+    IF editafter THEN SHELL "edit " + TargetDrive$ + Target$
+    IF viewafter THEN SHELL "type " + TargetDrive$ + Target$
 END SUB
 
 SUB MakeBatchExec (TargetDrive$, Target$, SourceDrive$, Source$)
@@ -182,7 +193,9 @@ SUB MakeBatchExec (TargetDrive$, Target$, SourceDrive$, Source$)
     PRINT #FileNr%, SourceDrive$ + Source$;
     IF addparams THEN PRINT #FileNr%, " %1 %2 %3 %4 %5 %6 %7 %8 %9"
     CLOSE
-    PostCreation (TheFile$)
+    IF editafter THEN SHELL "edit " + TargetDrive$ + Target$
+    IF viewafter THEN SHELL "type " + TargetDrive$ + Target$
+
 END SUB
 
 SUB MakeBatchText (TargetDrive$, Target$, SourceDrive$, Source$)
@@ -192,47 +205,8 @@ SUB MakeBatchText (TargetDrive$, Target$, SourceDrive$, Source$)
     PRINT #FileNr%, "@echo off"
     PRINT #FileNr%, "EDIT " + SourceDrive$ + Source$
     CLOSE
-    PostCreation (TheFile$)
-END SUB
-
-SUB ParseParam
-    localparam$ = param$
-    flen = LEN(localparam$)
-    spaces = 1
-    FOR f = 1 TO flen
-        IF MID$(localparam$, f, 1) = " " THEN spaces = spaces + 1
-    NEXT f
-    REDIM a$(spaces)
-    FOR f = 1 TO spaces
-        FOR n = 1 TO flen
-            IF LEFT$(localparam$, 1) <> " " THEN
-                a$(f) = a$(f) + LEFT$(localparam$, 1)
-                localparam$ = RIGHT$(localparam$, flen - 1)
-                flen = flen - 1
-            ELSE
-                localparam$ = RIGHT$(localparam$, flen - 1)
-                flen = flen - 1
-                EXIT FOR
-            END IF
-        NEXT n
-    NEXT f
-END SUB
-
-SUB PostCreation (TheFile$)
-    IF dryrun OR viewafter THEN
-        PRINT "Displaying content of " + TheFile$ + ":"
-        FileNr% = FREEFILE
-        OPEN TheFile$ FOR INPUT AS #FileNr%
-        WHILE NOT (EOF(FileNr%))
-            LINE INPUT #FileNr%, a$
-            PRINT a$
-        WEND
-        PRINT
-        CLOSE
-        editafter = 0
-    END IF
-    IF editafter THEN SHELL "edit " + TheFile$
-    IF dryrun THEN KILL TheFile$
+    IF editafter THEN SHELL "edit " + TargetDrive$ + Target$
+    IF viewafter THEN SHELL "type " + TargetDrive$ + Target$
 END SUB
 
 SUB ShowHelp (dest%)
@@ -245,9 +219,9 @@ SUB ShowHelp (dest%)
     a$ = a$ + b$ + "========================================"
     a$ = a$ + b$
     IF dest% THEN
-        a$ = a$ + b$ + "Usage: LN <parameters> SOURCE [ .COM .EXE .BAT .TXT .DOC .HTM .MD \\ ] TARGET"
+        a$ = a$ + b$ + "Usage: LN <parameters> SOURCE [ .COM .EXE .BAT .TXT .DOC \\ ] TARGET"
     ELSE
-        a$ = a$ + b$ + "Usage: LN <parameters> SOURCE [ .COM .EXE .BAT .TXT .DOC .HTM .MD \ ] TARGET"
+        a$ = a$ + b$ + "Usage: LN <parameters> SOURCE [ .COM .EXE .BAT .TXT .DOC \ ] TARGET"
     END IF
     a$ = a$ + b$
     a$ = a$ + b$ + "       /? -h --help : Display this help text."
@@ -255,7 +229,6 @@ SUB ShowHelp (dest%)
     a$ = a$ + b$ + "       /e -e : Edit batch file after creation."
     a$ = a$ + b$ + "       /m -m : Save this help to a Markdown-formatted text file."
     a$ = a$ + b$ + "       /p -p : Enable TARGET to handle parameters 1 to 9."
-    a$ = a$ + b$ + "       /r -r : Dry run. Display batch file but do not create it"
     a$ = a$ + b$ + "       /s -s : Does nothing, just kept for compatibility."
     a$ = a$ + b$ + "       /v -v : View batch file after creation."
     a$ = a$ + b$
@@ -284,7 +257,7 @@ SUB ShowHelp (dest%)
     a$ = a$ + b$
     a$ = a$ + b$ + "TEXT FILES"
     a$ = a$ + b$ + "----------"
-    a$ = a$ + b$ + "If SOURCE is a text file (TXT, DOC, HTM, MD), then LN creates a 2-line batch"
+    a$ = a$ + b$ + "If SOURCE is a text file (TXT, DOC), then LN creates a 2-line batch"
     a$ = a$ + b$ + "file that, when run, loads the file into the default text editor"
     a$ = a$ + b$ + "(the EDIT command).  "
     a$ = a$ + b$ + "The /d and /p parameters are not used."
